@@ -12,7 +12,7 @@ It was intended for my personal learning and practice through a simple version o
 
 
 To run the project, use:
-'''
+```
 uv pip install -r requirements.txt
 python transformer.py
-'''
+```
