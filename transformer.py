@@ -1,7 +1,14 @@
 import numpy as np
 
-vocabulary = list("abcdefghijklmnopqrstuvwxyz") #our sample vocabulary (lowercase a-z, can be adapted)
-v_len = len(vocabulary) 
+vocabulary = input("Please enter your vocabulary as a concatenated list (i.e.) \nabcdefghijklmnopqrstuvwxyz: \n\n")
+example = input("Please enter your sample pattern for the transformer to learn on. Note: the characters must be contained within the vocabulary. Enter in the following format: \nabcd->e\n\n")
+
+input_str = example.split("->")[0]
+next_token = example.split("->")[1]
+
+#vocabulary = list("abcdefghijklmnopqrstuvwxyz") #this is a built in test that you can run (the abcd->e example)
+
+v_len = len(vocabulary) #helps for embedding matrix size
 d_model = 8 #embedding length
 d_k = 8 #key length
 d_v = 8 #value length
@@ -10,14 +17,15 @@ E = np.random.normal(0, 0.02, (v_len, d_model)) #embedding matrix
 Wq = np.random.normal(0, 0.02, (d_model, d_k)) #query weights
 Wk = np.random.normal(0, 0.02, (d_model, d_k)) #key weights
 Wv = np.random.normal(0, 0.02, (d_model, d_v)) #value weights
-W1 = np.random.normal(0, 0.02, (d_model, d_ff)) #
-b1 = np.random.normal(0, 0.02, (d_ff,)) #
-W2 = np.random.normal(0, 0.02, (d_ff, d_model)) #
-b2 = np.random.normal(0, 0.02, (d_model,)) # 
-Wo = np.random.normal(0, 0.02, (d_model, v_len)) #
-bo = np.random.normal(0, 0.02, (v_len)) #
-lr = 0.001
+W1 = np.random.normal(0, 0.02, (d_model, d_ff)) #weight of first layer in FFN
+b1 = np.random.normal(0, 0.02, (d_ff,)) #bias of first layer in FFN
+W2 = np.random.normal(0, 0.02, (d_ff, d_model)) #weight of second layer in FFN
+b2 = np.random.normal(0, 0.02, (d_model,)) #bias of second layer in FFN
+Wo = np.random.normal(0, 0.02, (d_model, v_len)) #weight of output layer in FFN
+bo = np.random.normal(0, 0.02, (v_len)) #weight of output bias in FFN
+lr = 0.001 #learning rate for backward pass
 
+#softmax
 def softmax(n):
     soft_n = []
     for i  in range(len(n)):
@@ -26,6 +34,7 @@ def softmax(n):
         soft_n.append(soft_row)
     return np.array(soft_n)
 
+#softmax of an individual row, subtracting max
 def softmax_row(n):
     row = n
     maxval = np.max(row)
@@ -33,6 +42,7 @@ def softmax_row(n):
     soft_n = exp / np.sum(exp)
     return soft_n
 
+#relu
 def relu(n):
     relu_n = []
     for i in range(len(n)):
@@ -42,6 +52,7 @@ def relu(n):
         relu_n.append(n_row)
     return np.array(relu_n)
 
+#derivative of relu for backpropogation
 def reluprime(n):
     relu_prime = np.zeros_like(n)
     for i in range(len(relu_prime)):
@@ -50,21 +61,27 @@ def reluprime(n):
             else: relu_prime[i][j] = 0
     return relu_prime
 
-for step in range(1000):
+#running 1000 steps for training
 
-    input_str = "abcd"
-    next_token = "e"
+for step in range(1000):
+    
+    #character based tokenization 
     chunked = []
     for i in input_str: chunked.append(i)
+
+    #mapping input to token ids
     for i in range(len(chunked)):
         chunked[i] = vocabulary.index(chunked[i])
     t = len(chunked)
 
+    #creating input matrix x
     X = []
     for i in range(t):
         index = chunked[i]
-        X.append(E[index])
+        X.append(E[index]) #using the token id to find the corresponding embeddings for the token
     X = np.array(X) #dimensions of X are (t * d_model)
+
+    #Attention Block
 
     Q = X @ Wq #dimensions of Wq are (d_model * d_k), so dimensions of Q are (t * d_k)
     K = X @ Wk #dimensions of Wk are (d_model * d_k), so dimensions of Q are (t * d_k)
@@ -72,6 +89,7 @@ for step in range(1000):
 
     scores = Q @ K.T #dimenions of scores are (t * t)
 
+    #initializing casual mask to avoid looking at future tokens and "cheating" during training
     mask = []
     for i in range(t):
         row = []
@@ -101,32 +119,45 @@ for step in range(1000):
 
     #correct token
     correct_token_id = vocabulary.index(next_token)
+    
+    #Backward pass (weight/bias update)
 
     #CE loss
     loss = -np.log(probability[correct_token_id])
 
+    #derivative of CE
+    #initializing a one-hot vector based on Kronecker delta
     e_y = np.zeros_like(probability)
     e_y[correct_token_id] = 1
+
+    #solving for the derivative wrt logits
     dL_dlogits = probability - e_y
 
+    #using an outer product to find the derivative with respect to the output weights in FFN
     dL_dw0 = np.outer(h3[-1], dL_dlogits)
     dL_db0 = dL_dlogits
 
+    #using a backpropogation rule to find the derivative wrt h3_last (used in token prediction)
     dL_dh3_last = dL_dlogits @ Wo.T
 
+    #creating the derivative wrt h3 by setting the other ones to zero (does not affect the final output)
     dL_dh3 = np.zeros_like(h3)
     dL_dh3[-1] = dL_dh3_last
 
+    #finds d_dW2 and d_db2 for the second layer of the FFN
     dL_dW2 = h2.T @ dL_dh3
     dL_db2 = dL_dh3.sum(axis=0)
     dL_dh2 = dL_dh3 @ W2.T
 
+    #finds d_dW1 and d_db1 for the first layer of the FFN
     dL_dh1 = dL_dh2 * reluprime(h1)
     dL_dW1 = output.T @ dL_dh1 
     dL_db1 = dL_dh1.sum(axis=0)
 
+    #
     dL_doutput = dL_dh1 @ W1.T
 
+    #
     dL_dV = scores_soft.T @ dL_doutput
     dL_dscoressoft = dL_doutput @ V.T
 
@@ -163,6 +194,7 @@ for step in range(1000):
     Wo -= lr * dL_dw0
     bo -= lr * dL_db0
 
+#printing weight matrices for clarity
 print("E:\n", E, "\n")
 print("Wq:\n", Wq, "\n")
 print("Wk:\n", Wk, "\n")
@@ -175,8 +207,6 @@ print("Wo:\n", Wo, "\n")
 print("bo:\n", bo, "\n")
 
 
-input_str = "abcd"
-next_token = "e"
 chunked = []
 for i in input_str: chunked.append(i)
 for i in range(len(chunked)):
