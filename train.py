@@ -1,7 +1,7 @@
 import concurrent.futures
 import numpy as np
-import os
-import config
+import os, config
+from util import Util
 
 class Train:
 
@@ -11,49 +11,36 @@ class Train:
         self.d_v = config.d_v
         self.d_ff = config.d_ff
         self.lr = config.lr
-
-        if os.path.exists("weights/E.npy"):
-            self.E = np.load("weights/E.npy")
-            self.Wq = np.load("weights/Wq.npy")
-            self.Wk = np.load("weights/Wk.npy")
-            self.Wv = np.load("weights/Wv.npy")
-            self.W1 = np.load("weights/W1.npy")
-            self.b1 = np.load("weights/b1.npy")
-            self.W2 = np.load("weights/W2.npy")
-            self.b2 = np.load("weights/b2.npy")
-            self.Wo = np.load("weights/Wo.npy")
-            self.bo = np.load("weights/bo.npy")
-
-        else:
-            self.E = np.random.normal(0, 0.02, (self.v_len, self.d_model)) #embedding matrix
-            self.Wq = np.random.normal(0, 0.02, (self.d_model, self.d_k)) #query weights
-            self.Wk = np.random.normal(0, 0.02, (self.d_model, self.d_k)) #key weights
-            self.Wv = np.random.normal(0, 0.02, (self.d_model, self.d_v)) #value weights
-            self.W1 = np.random.normal(0, 0.02, (self.d_model, self.d_ff)) #weight of first layer in FFN
-            self.b1 = np.random.normal(0, 0.02, (self.d_ff,)) #bias of first layer in FFN
-            self.W2 = np.random.normal(0, 0.02, (self.d_ff, self.d_model)) #weight of second layer in FFN
-            self.b2 = np.random.normal(0, 0.02, (self.d_model,)) #bias of second layer in FFN
-            self.Wo = np.random.normal(0, 0.02, (self.d_model, self.v_len)) #weight of output layer in FFN
-            self.bo = np.random.normal(0, 0.02, (self.v_len)) #weight of output bias in FFN
+        self.util = Util()
 
 
-    def train(self, examplenum):
-        
-        vocabulary = input("Please enter your vocabulary as a concatenated list (i.e.) \nabcdefghijklmnopqrstuvwxyz: \n\n")
+        self.E = np.load("weights/E.npy")
+        self.Wq = np.load("weights/Wq.npy")
+        self.Wk = np.load("weights/Wk.npy")
+        self.Wv = np.load("weights/Wv.npy")
+        self.W1 = np.load("weights/W1.npy")
+        self.b1 = np.load("weights/b1.npy")
+        self.W2 = np.load("weights/W2.npy")
+        self.b2 = np.load("weights/b2.npy")
+        self.Wo = np.load("weights/Wo.npy")
+        self.bo = np.load("weights/bo.npy")
+
+    def train(self, examplenum, vocabulary):
 
         self.v_len = len(vocabulary) 
 
         examples = []
 
-        for i in range(examplenum):
-            example = input("Please enter your sample pattern for the transformer to learn on. Note: the characters must be contained within the vocabulary. Enter in the following format: \nabcd->e\n\n")
+        examples.append(input('''Please enter your sample pattern for MeaninglessGPT in the format "abcd->e": \n'''))
+        for i in range(examplenum-1):
+            example = input("Enter the next pattern here: \n")
             examples.append(example)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=examplenum) as executor:
-            print("Training has begun on " + str(examplenum) + "patterns.")
+            print("Training has begun on " + str(examplenum) + " patterns.")
             futures = []
             for example in examples:
-                future = executor.submit(self.train_body(example, vocabulary))
+                future = executor.submit(self.train_body, example, vocabulary)
                 futures.append(future)
 
             futures = [future.result() for future in futures]
@@ -81,58 +68,37 @@ class Train:
             Wo_list.append(trained["Wo"])
             bo_list.append(trained["bo"])
 
-        np.save("weights/E.npy", E_list / len(E_list))
-        np.save("weights/Wq.npy", Wq_list / len(Wq_list))
-        np.save("weights/Wk.npy", Wk_list / len(Wk_list))
-        np.save("weights/Wv.npy", Wv_list / len(Wv_list))
-        np.save("weights/W1.npy", W1_list / len(W1_list))
-        np.save("weights/b1.npy", b1_list / len(b1_list))
-
+        np.save("weights/E.npy", np.mean(E_list, axis=0))
+        np.save("weights/Wq.npy", np.mean(Wq_list, axis=0))
+        np.save("weights/Wk.npy", np.mean(Wk_list, axis=0))
+        np.save("weights/Wv.npy", np.mean(Wv_list, axis=0))
+        np.save("weights/W1.npy", np.mean(W1_list, axis=0))
+        np.save("weights/b1.npy", np.mean(b1_list, axis=0))
+        np.save("weights/W2.npy", np.mean(W2_list, axis=0))
+        np.save("weights/b2.npy", np.mean(b2_list, axis=0))
+        np.save("weights/Wo.npy", np.mean(Wo_list, axis=0))
+        np.save("weights/bo.npy", np.mean(bo_list, axis=0))
 
 
         print("Training completed. continuing on to testing.")
-
 
 
     def train_body(self, example, vocabulary):
         input_str = example.split("->")[0]
         next_token = example.split("->")[1]
 
-        #softmax
-        def softmax(n):
-            soft_n = []
-            for i  in range(len(n)):
-                row = n[i]
-                soft_row = softmax_row(row)
-                soft_n.append(soft_row)
-            return np.array(soft_n)
 
-        #softmax of an individual row, subtracting max
-        def softmax_row(n):
-            row = n
-            maxval = np.max(row)
-            exp = np.exp(row - maxval)
-            soft_n = exp / np.sum(exp)
-            return soft_n
+        E = self.E.copy()
+        Wq = self.Wq.copy()
+        Wk = self.Wk.copy()
+        Wv = self.Wv.copy()
+        W1 = self.W1.copy()
+        b1 = self.b1.copy()
+        W2 = self.W2.copy()
+        b2 = self.b2.copy()
+        Wo = self.Wo.copy()
+        bo = self.bo.copy()
 
-        #relu
-        def relu(n):
-            relu_n = []
-            for i in range(len(n)):
-                n_row = []
-                for j in range(len(n[i])):
-                    n_row.append(max(n[i][j], 0))
-                relu_n.append(n_row)
-            return np.array(relu_n)
-
-        #derivative of relu for backpropogation
-        def reluprime(n):
-            relu_prime = np.zeros_like(n)
-            for i in range(len(relu_prime)):
-                for j in range(len(relu_prime[i])):
-                    if n[i][j] > 0: relu_prime[i][j] = 1
-                    else: relu_prime[i][j] = 0
-            return relu_prime
 
         #running 1000 steps for training
 
@@ -173,18 +139,18 @@ class Train:
             mask = np.array(mask) #dimensions of mask is also (t * t)
 
             scores_norm = scores / np.sqrt(self.d_k) + mask
-            scores_soft = softmax(scores_norm) #still (t * t)
+            scores_soft = self.util.softmax(scores_norm) #still (t * t)
 
             output = scores_soft @ V #reminder that dimensions of V are (t * self.d_v), so output is (t * self.d_v)
 
             #FFN
 
             h1 = output @ W1 + b1 #dimensions of W1 is (self.d_v * dff) and dimensions of b1 is (self.d_ff,), so h1 is (t * self.d_ff)
-            h2 = relu(h1) #dimensions do not change
+            h2 = self.util.relu(h1) #dimensions do not change
             h3 = h2 @ W2 + b2 #dimensions of W2 is (self.d_ff * self.d_model) and dimensions of b2 is (self.d_model,), so h3 is (t, self.d_model)
 
             logits = h3[-1] @ Wo + bo #dimensions of W0 is (self.d_model, self.v_len) and b0 are (self.v_len,), so dimensions of logits are (self.v_len,)
-            probability = softmax_row(logits) #dimensions do not change
+            probability = self.util.softmax_row(logits) #dimensions do not change
 
             #end of forward pass- we would argmax to retrieve the value here
             #print(vocabulary[np.argmax(probability)])
@@ -197,6 +163,9 @@ class Train:
 
             #CE loss
             loss = -np.log(probability[correct_token_id])
+
+            if step % 5 == 0:
+                print("Loss: " + str(loss) + "\n")
 
             #derivative of CE
             #initializing a one-hot vector based on Kronecker delta
@@ -223,7 +192,7 @@ class Train:
             dL_dh2 = dL_dh3 @ W2.T
 
             #finds d_dW1 and d_db1 for the first layer of the FFN
-            dL_dh1 = dL_dh2 * reluprime(h1)
+            dL_dh1 = dL_dh2 * self.util.reluprime(h1)
             dL_dW1 = output.T @ dL_dh1 
             dL_db1 = dL_dh1.sum(axis=0)
 
@@ -262,7 +231,7 @@ class Train:
             dL_dX = dL_dQ @ Wq.T + dL_dK @ Wk.T + dL_dV @ Wv.T
             
             #finding final loss gradient wrt embedding matrix E
-            dL_dE = np.zeros_like(E)
+            dL_dE = np.zeros_like(self.E)
             for i in range(t):
                 dL_dE[chunked[i]] += dL_dX[i]
 
@@ -278,4 +247,4 @@ class Train:
             Wo -= self.lr * dL_dw0
             bo -= self.lr * dL_db0
 
-            return {"E": E, "Wq": Wq, "Wk": Wk, "Wv": Wv, "W1": W1, "b1": b1, "W2": W2, "b2": b2, "Wo": Wo, "bo": bo}
+        return {"E": E, "Wq": Wq, "Wk": Wk, "Wv": Wv, "W1": W1, "b1": b1, "W2": W2, "b2": b2, "Wo": Wo, "bo": bo}
