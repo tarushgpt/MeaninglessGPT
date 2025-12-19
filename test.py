@@ -1,6 +1,5 @@
 import numpy as np
 
-#printing final weight matrices for clarity
 
 print("E:\n", E, "\n")
 print("Wq:\n", Wq, "\n")
