@@ -6,6 +6,7 @@ from util import Util
 class Train:
 
     def __init__(self):
+        #initializes unlearned constants
         self.d_model = config.d_model
         self.d_k = config.d_k
         self.d_v = config.d_v
@@ -14,7 +15,7 @@ class Train:
         self.training_steps = config.training_steps
         self.util = Util()
 
-
+        #loads weights
         self.E = np.load("weights/E.npy")
         self.Wq = np.load("weights/Wq.npy")
         self.Wk = np.load("weights/Wk.npy")
@@ -26,6 +27,7 @@ class Train:
         self.Wo = np.load("weights/Wo.npy")
         self.bo = np.load("weights/bo.npy")
 
+    #overarching training
     def train(self, example, vocabulary):
 
         self.v_len = len(vocabulary) 
@@ -33,8 +35,11 @@ class Train:
         examples = []
 
         for step in range(self.training_steps):
+            
+            #runs a training step
             trained = self.train_step(example, vocabulary)
             
+            #updates weights and biases
             self.E -= self.lr * trained["dE"]
             self.Wq -= self.lr * trained["dWq"]
             self.Wk -= self.lr * trained["dWk"]
@@ -47,7 +52,7 @@ class Train:
             self.bo -= self.lr * trained["dbo"]
 
 
-
+        #saves weights at the end of training
         np.save("weights/E.npy", self.E)
         np.save("weights/Wq.npy", self.Wq)
         np.save("weights/Wk.npy", self.Wk)
@@ -62,23 +67,12 @@ class Train:
 
         print("Training completed. continuing on to testing.")
 
-
+    #runs one training step
     def train_step(self, example, vocabulary):
+        #input string
         input_str = example.split("->")[0]
+        #next token
         next_token = example.split("->")[1]
-
-
-        E = self.E.copy()
-        Wq = self.Wq.copy()
-        Wk = self.Wk.copy()
-        Wv = self.Wv.copy()
-        W1 = self.W1.copy()
-        b1 = self.b1.copy()
-        W2 = self.W2.copy()
-        b2 = self.b2.copy()
-        Wo = self.Wo.copy()
-        bo = self.bo.copy()
-
 
         
         #character based tokenization 
@@ -94,14 +88,14 @@ class Train:
         X = []
         for i in range(t):
             index = chunked[i]
-            X.append(E[index]) #using the token id to find the corresponding embeddings for the token
+            X.append(self.E[index]) #using the token id to find the corresponding embeddings for the token
         X = np.array(X) #dimensions of X are (t * self.d_model)
 
         #Attention Block
 
-        Q = X @ Wq #dimensions of Wq are (self.d_model * self.d_k), so dimensions of Q are (t * self.d_k)
-        K = X @ Wk #dimensions of Wk are (self.d_model * self.d_k), so dimensions of Q are (t * self.d_k)
-        V = X @ Wv #dimensions of Wv are (self.d_model * self.d_v), so dimensions of Q are (t * self.d_v)
+        Q = X @ self.Wq #dimensions of Wq are (self.d_model * self.d_k), so dimensions of Q are (t * self.d_k)
+        K = X @ self.Wk #dimensions of Wk are (self.d_model * self.d_k), so dimensions of Q are (t * self.d_k)
+        V = X @ self.Wv #dimensions of Wv are (self.d_model * self.d_v), so dimensions of Q are (t * self.d_v)
 
         scores = Q @ K.T #dimenions of scores are (t * t)
 
@@ -122,11 +116,11 @@ class Train:
 
         #FFN
 
-        h1 = output @ W1 + b1 #dimensions of W1 is (self.d_v * dff) and dimensions of b1 is (self.d_ff,), so h1 is (t * self.d_ff)
+        h1 = output @ self.W1 + self.b1 #dimensions of W1 is (self.d_v * dff) and dimensions of b1 is (self.d_ff,), so h1 is (t * self.d_ff)
         h2 = self.util.relu(h1) #dimensions do not change
-        h3 = h2 @ W2 + b2 #dimensions of W2 is (self.d_ff * self.d_model) and dimensions of b2 is (self.d_model,), so h3 is (t, self.d_model)
+        h3 = h2 @ self.W2 + self.b2 #dimensions of W2 is (self.d_ff * self.d_model) and dimensions of b2 is (self.d_model,), so h3 is (t, self.d_model)
 
-        logits = h3[-1] @ Wo + bo #dimensions of W0 is (self.d_model, self.v_len) and b0 are (self.v_len,), so dimensions of logits are (self.v_len,)
+        logits = h3[-1] @ self.Wo + self.bo #dimensions of W0 is (self.d_model, self.v_len) and b0 are (self.v_len,), so dimensions of logits are (self.v_len,)
         probability = self.util.softmax_row(logits) #dimensions do not change
 
         #end of forward pass- we would argmax to retrieve the value here
@@ -154,7 +148,7 @@ class Train:
         dL_db0 = dL_dlogits
 
         #using a backpropogation rule to find the derivative wrt h3_last (used in token prediction)
-        dL_dh3_last = dL_dlogits @ Wo.T
+        dL_dh3_last = dL_dlogits @ self.Wo.T
 
         #creating the derivative wrt h3 by setting the other ones to zero (does not affect the final output)
         dL_dh3 = np.zeros_like(h3)
@@ -163,7 +157,7 @@ class Train:
         #finds d_dW2 and d_db2 for the second layer of the FFN
         dL_dW2 = h2.T @ dL_dh3
         dL_db2 = dL_dh3.sum(axis=0)
-        dL_dh2 = dL_dh3 @ W2.T
+        dL_dh2 = dL_dh3 @ self.W2.T
 
         #finds d_dW1 and d_db1 for the first layer of the FFN
         dL_dh1 = dL_dh2 * self.util.reluprime(h1)
@@ -171,7 +165,7 @@ class Train:
         dL_db1 = dL_dh1.sum(axis=0)
 
         #compute loss gradient wrt output weights
-        dL_doutput = dL_dh1 @ W1.T
+        dL_doutput = dL_dh1 @ self.W1.T
 
         #compute loss gradients wrt value tensor
         dL_dV = scores_soft.T @ dL_doutput
@@ -202,11 +196,12 @@ class Train:
         dL_dWq = X.T @ dL_dQ
 
         #find the loss gradient wrt input X
-        dL_dX = dL_dQ @ Wq.T + dL_dK @ Wk.T + dL_dV @ Wv.T
+        dL_dX = dL_dQ @ self.Wq.T + dL_dK @ self.Wk.T + dL_dV @ self.Wv.T
         
         #finding final loss gradient wrt embedding matrix E
         dL_dE = np.zeros_like(self.E)
         for i in range(t):
             dL_dE[chunked[i]] += dL_dX[i]
 
+        #returns relevant derivatives for weight updates and training
         return {"dE": dL_dE, "dWq": dL_dWq, "dWk": dL_dWk, "dWv": dL_dWv, "dW1": dL_dW1, "db1": dL_db1, "dW2": dL_dW2, "db2": dL_db2, "dWo": dL_dw0, "dbo": dL_db0}

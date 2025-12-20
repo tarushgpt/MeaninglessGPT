@@ -18,6 +18,7 @@ def weight_initialize(vocabulary):
     Wo = np.random.normal(0, 0.02, (config.d_model, v_len)) #weight of output layer in FFN
     bo = np.random.normal(0, 0.02, (v_len)) #weight of output bias in FFN
 
+    #save weights
     np.save("weights/E.npy", E)
     np.save("weights/Wq.npy", Wq)
     np.save("weights/Wk.npy", Wk)
@@ -30,11 +31,11 @@ def weight_initialize(vocabulary):
     np.save("weights/bo.npy", bo)
 
 def main():
-
+    #checks if the user is new
     newornot = input("Welcome to MeaninglessGPT! If you are new, press 'Enter.' If not, press any other key. ")
     print("\n")
 
-    
+    #onboarding message
     if newornot == "":
         print("This model uses a manual backpropogation system (no PyTorch, just NumPy) as a practice implementation of a transformer.\n")
         print("It is entirely designed to overfit on specific examples, hence the name 'MeaninglessGPT.'\n")
@@ -43,7 +44,7 @@ def main():
         print("Happy experimenting! -Tarush\n\n")
 
     
-
+    #training/testing loop
     while True:
         trainortest = input("Please enter '1' to train, '2' to test, or '3' to exit. ")
         if trainortest == "1":
@@ -57,6 +58,7 @@ def main():
             example = input('''Please enter the example you want to train on, in the form "abcd->e": \n''')
 
             train.train(example, vocabulary)
+            
         elif trainortest == "2":
             if vocabulary:
                 test = Test()

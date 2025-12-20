@@ -4,7 +4,9 @@ import config
 
 class Test:
 
+    #initializes the test class
     def __init__(self):
+        #initializes constants
         self.d_model = config.d_model
         self.d_k = config.d_k
         self.d_v = config.d_v
@@ -12,7 +14,7 @@ class Test:
         self.lr = config.lr
         self.util = Util()
 
-
+        #loads weights
         self.E = np.load("weights/E.npy")
         self.Wq = np.load("weights/Wq.npy")
         self.Wk = np.load("weights/Wk.npy")
@@ -25,30 +27,38 @@ class Test:
         self.bo = np.load("weights/bo.npy")
 
 
+    #tests the pattern
     def test(self, vocabulary):
         
         while True:
+            #enter the input and exit if Enter
             input_str = input("Enter your input here, or press 'Enter' to quit: ")
             print("\n")
+
             if input_str == "":
                 break
+
+            #chunks output
             chunked = []
             for i in input_str: chunked.append(i)
             for i in range(len(chunked)):
                 chunked[i] = vocabulary.index(chunked[i])
             t = len(chunked)
 
+            #creates input matrix
             X = []
             for i in range(t):
                 index = chunked[i]
                 X.append(self.E[index])
             X = np.array(X) 
 
+            #Q, K, and V matrices
             Q = X @ self.Wq 
             K = X @ self.Wk 
             V = X @ self.Wv
 
             scores = Q @ K.T 
+            #mask
             mask = []
             for i in range(t):
                 row = []
@@ -58,16 +68,24 @@ class Test:
                 mask.append(row)
             mask = np.array(mask) 
 
+            #normalizes and softmaxes scores
             scores_norm = scores / np.sqrt(self.d_k) + mask
             scores_soft = self.util.softmax(scores_norm) 
 
+            #output matrix
             output = scores_soft @ V 
 
+            #ffn
             h1 = output @ self.W1 + self.b1 
             h2 = self.util.relu(h1) 
             h3 = h2 @ self.W2 + self.b2 
 
+            #computes logits
             logits = h3[-1] @ self.Wo + self.bo 
+            
+            #probability by row-wise softmax
             probability = self.util.softmax_row(logits) 
+            
+            #argmax is acceptable for the scale of the GPT
             print("MeaninglessGPT: " + vocabulary[np.argmax(probability)] + "\n")
 
