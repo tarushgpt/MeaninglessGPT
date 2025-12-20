@@ -26,63 +26,25 @@ class Train:
         self.Wo = np.load("weights/Wo.npy")
         self.bo = np.load("weights/bo.npy")
 
-    def train(self, examplenum, vocabulary):
+    def train(self, example, vocabulary):
 
         self.v_len = len(vocabulary) 
 
         examples = []
 
-        examples.append(input('''Please enter your sample pattern for MeaninglessGPT in the format "abcd->e": \n'''))
-        for i in range(examplenum-1):
-            example = input("Enter the next pattern here: \n")
-            examples.append(example)
-
-        print("Training has begun on " + str(examplenum) + " patterns.")
-
         for step in range(self.training_steps):
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=examplenum) as executor:
-                
-                futures = []
-                for example in examples:
-                    future = executor.submit(self.train_body, example, vocabulary)
-                    futures.append(future)
-
-                futures = [future.result() for future in futures]
-
-            dE_list = []
-            dWq_list = []
-            dWk_list = []
-            dWv_list = []
-            dW1_list = []
-            db1_list = []
-            dW2_list = []
-            db2_list = []
-            dWo_list = []
-            dbo_list = []
-
-            for trained in futures:
-                dE_list.append(trained["dE"])
-                dWq_list.append(trained["dWq"])
-                dWk_list.append(trained["dWk"])
-                dWv_list.append(trained["dWv"])
-                dW1_list.append(trained["dW1"])
-                db1_list.append(trained["db1"])
-                dW2_list.append(trained["dW2"])
-                db2_list.append(trained["db2"])
-                dWo_list.append(trained["dWo"])
-                dbo_list.append(trained["dbo"])
+            trained = self.train_step(example, vocabulary)
             
-            self.E -= self.lr * np.mean(dE_list, axis=0)
-            self.Wq -= self.lr * np.mean(dWq_list, axis=0)
-            self.Wk -= self.lr * np.mean(dWk_list, axis=0)
-            self.Wv -= self.lr * np.mean(dWv_list, axis=0)
-            self.W1 -= self.lr * np.mean(dW1_list, axis=0)
-            self.b1 -= self.lr * np.mean(db1_list, axis=0)
-            self.W2 -= self.lr * np.mean(dW2_list, axis=0)
-            self.b2 -= self.lr * np.mean(db2_list, axis=0)
-            self.Wo -= self.lr * np.mean(dWo_list, axis=0)
-            self.bo -= self.lr * np.mean(dbo_list, axis=0)
+            self.E -= self.lr * trained["dE"]
+            self.Wq -= self.lr * trained["dWq"]
+            self.Wk -= self.lr * trained["dWk"]
+            self.Wv -= self.lr * trained["dWv"]
+            self.W1 -= self.lr * trained["dW1"]
+            self.b1 -= self.lr * trained["db1"]
+            self.W2 -= self.lr * trained["dW2"]
+            self.b2 -= self.lr * trained["db2"]
+            self.Wo -= self.lr * trained["dWo"]
+            self.bo -= self.lr * trained["dbo"]
 
 
 
@@ -101,7 +63,7 @@ class Train:
         print("Training completed. continuing on to testing.")
 
 
-    def train_body(self, example, vocabulary):
+    def train_step(self, example, vocabulary):
         input_str = example.split("->")[0]
         next_token = example.split("->")[1]
 

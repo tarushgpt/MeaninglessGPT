@@ -39,7 +39,7 @@ def main():
         print("This model uses a manual backpropogation system (no PyTorch, just NumPy) as a practice implementation of a transformer.\n")
         print("It is entirely designed to overfit on specific examples, hence the name 'MeaninglessGPT.'\n")
         print("All weights will be saved in ~/weights/. You can adapt the config file to change model characteristics.\n")
-        print("Please note that since MeaninglessGPT overfits on patterns, it has virtually no memory from past examples. In other words, your old examples will be effectively overwritten, although some semblance of memory might remain.\n")
+        print("Please note that since MeaninglessGPT overfits on patterns, it has virtually no memory from past examples. In other words, your old examples will be effectively overwritten with each training step.\n")
         print("Happy experimenting! -Tarush\n\n")
 
     
@@ -54,8 +54,9 @@ def main():
 
             train = Train()
 
-            examplenum = input("Please enter the number of examples you wish to train on. ")
-            train.train(int(examplenum), vocabulary)
+            example = input('''Please enter the example you want to train on, in the form "abcd->e": \n''')
+
+            train.train(example, vocabulary)
         elif trainortest == "2":
             if vocabulary:
                 test = Test()
